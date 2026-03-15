@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Homebrew UI - Package Manager</title>
+    <link rel="icon" type="image/png" href="favicon.png">
+    <!-- Tailwind CSS with custom config for dark mode -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        amber: {
+                            500: '#f59e0b',
+                            600: '#d97706',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style data-purpose="custom-fonts">
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains+Mono', monospace; }
+        
+        /* Prevent selection */
+        * { user-select: none; }
+        input { user-select: auto; }
+    </style>
+    <style data-purpose="layout-tweaks">
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        
+        /* Light mode scrollbar */
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Dark mode scrollbar */
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+        .dark ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* Spinner animation */
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .spinner { animation: spin 1s linear infinite; }
+    </style>
+</head>
+
+<body class="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 h-full flex overflow-hidden transition-colors duration-200">
+
+<!-- Loading Overlay -->
+<div id="loading-overlay" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex-col items-center justify-center">
+    <svg class="spinner w-12 h-12 text-amber-500 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="2" x2="12" y2="6"></line>
+        <line x1="12" y1="18" x2="12" y2="22"></line>
+        <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
+        <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
+        <line x1="2" y1="12" x2="6" y2="12"></line>
+        <line x1="18" y1="12" x2="22" y2="12"></line>
+        <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
+        <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+    </svg>
+    <p id="loading-text" class="text-white font-medium text-lg">Loading...</p>
+</div>
+
+<!-- Modal -->
+<div id="package-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 hidden flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-700 select-text">
+        <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+            <h3 id="modal-title" class="text-lg font-bold text-slate-900 dark:text-white">Package Info</h3>
+            <button class="close-modal text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div class="p-6 overflow-y-auto max-h-[70vh]" id="modal-content">
+            <div id="modal-info" class="space-y-6 select-text">
+                <!-- Structured info will be injected here -->
+                <div class="flex items-center justify-center py-10">
+                    <svg class="spinner w-8 h-8 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
+                    </svg>
+                </div>
+            </div>
+        </div>
+        <div class="px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex justify-end gap-3" id="modal-actions">
+            <!-- Dynamically injected buttons -->
+        </div>
+    </div>
+</div>
+
+<!-- BEGIN: Sidebar -->
+<aside class="w-64 bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col transition-colors duration-200 z-20">
+    <div class="p-6">
+        <div class="flex items-center justify-between mb-8">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded overflow-hidden">
+                    <img src="app_logo.png?v=2" class="w-full h-full object-cover">
+                </div>
+                <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white">BrewUpdate</h1>
+    </div>
+            <button id="theme-toggle" class="p-2 text-slate-500 hover:text-amber-500 dark:hover:text-amber-400 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                <!-- Sun Icon shown in dark mode -->
+                <svg id="theme-toggle-light-icon" class="hidden w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                <!-- Moon Icon shown in light mode -->
+                <svg id="theme-toggle-dark-icon" class="hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
+            </button>
+        </div>
+
+        <nav class="space-y-1 nav-menu">
+            <!-- Dashboard Tab -->
+            <a data-view="dashboard" class="nav-item flex items-center gap-3 px-3 py-2 bg-slate-200/70 dark:bg-amber-500/10 text-slate-900 dark:text-amber-400 rounded-md group cursor-pointer active-tab">
+                <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                <span class="font-medium">Dashboard</span>
+            </a>
+            
+            <!-- Installed Tab -->
+            <a data-view="installed" class="nav-item flex items-center gap-3 px-3 py-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white rounded-md transition-colors group cursor-pointer">
+                <svg class="w-5 h-5 group-hover:text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"></path></svg>
+                <span class="font-medium">Installed</span>
+            </a>
+
+            <!-- Discover Tab -->
+            <a data-view="discover" class="nav-item flex items-center gap-3 px-3 py-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white rounded-md transition-colors group cursor-pointer">
+                <svg class="w-5 h-5 group-hover:text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                <span class="font-medium">Discover</span>
+            </a>
+
+            <!-- Maintenance Tab -->
+            <a data-view="maintenance" class="nav-item flex items-center gap-3 px-3 py-2 text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white rounded-md transition-colors group cursor-pointer">
+                <svg class="w-5 h-5 group-hover:text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                <span class="font-medium">Maintenance</span>
+            </a>
+        </nav>
+    </div>
+    
+    <div class="mt-auto p-4 bg-slate-100/50 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-800">
+        <div class="space-y-3">
+            <div class="flex justify-between items-center text-xs">
+                <span class="text-slate-500 dark:text-slate-400 uppercase tracking-widest font-semibold">Stats</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div class="bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <p class="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Installed</p>
+                    <p id="sb-installed" class="text-lg font-bold text-slate-900 dark:text-white mono leading-none mt-1">--</p>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <p class="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Updates</p>
+                    <p id="sb-outdated" class="text-lg font-bold text-amber-500 mono leading-none mt-1">--</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</aside>
+<!-- END: Sidebar -->
+
+<!-- BEGIN: Main Content Area -->
+<main class="flex-1 flex flex-col min-w-0 bg-white dark:bg-slate-900 relative">
+
+    <!-- View: Dashboard -->
+    <section id="view-dashboard" class="view-panel flex-1 flex flex-col h-full absolute inset-0">
+        <header class="h-16 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-8 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-10 shrink-0">
+            <h2 class="text-xl font-bold text-slate-900 dark:text-white">Dashboard</h2>
+            <div class="flex items-center gap-4 ml-8">
+                <button id="btn-update-all" class="bg-amber-500 hover:bg-amber-600 text-[#0f172a] font-bold py-1.5 px-4 rounded text-sm transition-colors shadow-sm">
+                    Upgrade Available Packages
+                </button>
+            </div>
+        </header>
+        <div class="flex-1 overflow-y-auto p-8">
+            <div class="max-w-5xl mx-auto">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col items-center justify-center text-center">
+                        <div class="w-16 h-16 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center mb-4">
+                            <span class="text-3xl font-bold text-slate-900 dark:text-white mono" id="dash-installed">--</span>
+                        </div>
+                        <h3 class="text-lg font-semibold text-slate-700 dark:text-slate-300">Total Packages</h3>
+                        <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">Currently installed via Homebrew</p>
+                    </div>
+                     <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col items-center justify-center text-center relative overflow-hidden">
+                        <div class="absolute inset-0 bg-amber-500/5 dark:bg-amber-500/10 hidden" id="dash-updates-bg"></div>
+                        <div class="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mb-4 z-10">
+                            <span class="text-3xl font-bold text-amber-600 dark:text-amber-500 mono" id="dash-outdated">--</span>
+                        </div>
+                        <h3 class="text-lg font-semibold text-slate-700 dark:text-slate-300 z-10">Pending Updates</h3>
+                        <p class="text-sm text-slate-500 dark:text-slate-400 mt-2 z-10" id="dash-outdated-sub">You are up to date.</p>
+                    </div>
+                </div>
+
+                <div class="mb-6 flex justify-between items-center">
+                    <h2 class="text-xl font-bold text-slate-900 dark:text-white">Updates Available</h2>
+                </div>
+                <div id="updates-list" class="space-y-4">
+                    <!-- Outdated packages injected here -->
+                    <div class="text-center py-10 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400">Loading updates...</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- View: Installed -->
+    <section id="view-installed" class="view-panel flex-1 flex flex-col h-full absolute inset-0 hidden">
+        <header class="h-16 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-8 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-10 shrink-0">
+            <div class="flex-1 max-w-xl">
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg class="h-5 w-5 text-slate-500 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                    </div>
+                    <input id="installed-search" class="block w-full bg-slate-100 dark:bg-slate-800 border-transparent focus:border-amber-500 dark:focus:border-amber-500 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-amber-500 pl-10 p-2 transition-colors placeholder-slate-500" placeholder="Filter installed packages..." type="text"/>
+                </div>
+            </div>
+        </header>
+        <div class="flex-1 overflow-y-auto p-8">
+            <div class="max-w-5xl mx-auto">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Installed Packages</h2>
+                </div>
+                <!-- Package List -->
+                <div id="installed-list" class="space-y-4">
+                    <div class="text-center py-10 text-slate-500">Loading installed packages...</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- View: Discover -->
+    <section id="view-discover" class="view-panel flex-1 flex flex-col h-full absolute inset-0 hidden">
+        <header class="h-16 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-8 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-10 shrink-0">
+            <div class="flex-1 w-full relative flex gap-3">
+                <input id="discover-input" class="block flex-1 bg-slate-100 dark:bg-slate-800 border-transparent focus:border-amber-500 dark:focus:border-amber-500 text-slate-900 dark:text-white text-sm rounded-lg pl-4 p-2 transition-colors placeholder-slate-500" placeholder="Search Homebrew index (e.g. wget, firefox)..." type="text" autocomplete="off"/>
+                <button id="btn-search" class="bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 dark:hover:bg-slate-600 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors">Search</button>
+            </div>
+        </header>
+        <div class="flex-1 overflow-y-auto p-8">
+            <div class="max-w-5xl mx-auto">
+                <div id="search-results" class="space-y-4">
+                    <div class="text-center py-12">
+                        <svg class="w-16 h-16 text-slate-300 dark:text-slate-700 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        <h3 class="text-lg font-medium text-slate-900 dark:text-white mb-1">Discover Packages</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-sm">Type a query above to search Homebrew formula and casks.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- View: Maintenance -->
+    <section id="view-maintenance" class="view-panel flex-1 flex flex-col h-full absolute inset-0 hidden">
+        <header class="h-16 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-8 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-10 shrink-0">
+            <h2 class="text-xl font-bold text-slate-900 dark:text-white">System Maintenance</h2>
+        </header>
+        <div class="flex-1 overflow-y-auto p-8">
+            <div class="max-w-5xl mx-auto">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <!-- Cleanup -->
+                    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm flex flex-col gap-4">
+                        <div class="w-12 h-12 flex-shrink-0 bg-blue-50 dark:bg-blue-500/10 rounded-xl flex items-center justify-center">
+                            <span class="text-2xl">🧹</span>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-2">Cleanup Caches</h3>
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Remove old lock files, outdated downloads for all formulae and casks, and old versions of installed formulae to free up disk space.</p>
+                        </div>
+                        <button id="btn-cleanup" class="mt-auto block w-full text-center py-2.5 bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 text-white rounded-lg font-medium transition-colors">Run Cleanup</button>
+                    </div>
+
+                    <!-- Doctor -->
+                    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm flex flex-col gap-4">
+                        <div class="w-12 h-12 flex-shrink-0 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl flex items-center justify-center">
+                            <span class="text-2xl">🩺</span>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-900 dark:text-white mb-2">Brew Doctor</h3>
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Check your system for potential problems and output diagnostic information. Run this if you are experiencing issues with Homebrew.</p>
+                        </div>
+                        <button id="btn-doctor" class="mt-auto block w-full text-center py-2.5 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-900 dark:text-white rounded-lg font-medium transition-colors">Run Doctor</button>
+                    </div>
+                </div>
+
+                <div id="maintenance-output" class="hidden">
+                    <h3 class="text-sm font-bold text-slate-900 dark:text-white mb-3 uppercase tracking-wider">Console Output</h3>
+                    <div class="bg-slate-900 dark:bg-black rounded-xl p-4 border border-slate-800">
+                        <pre class="text-emerald-400 text-xs font-mono whitespace-pre-wrap select-text max-h-64 overflow-y-auto w-full break-all"></pre>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+</main>
+<!-- END: Main Content Area -->
+
+<script src="script.js"></script>
+</body>
+</html>
